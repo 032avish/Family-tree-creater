@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Canvas Example</title>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+        }
+
+        canvas {
+            border: 1px solid #000;
+            background-color: #CBD18F;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #3A6B35;
+            padding: 10px 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        .top-bar h3 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #e3a618;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s ease-in-out;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .relationship-line {
+            position: absolute;
+            pointer-events: none;
+            stroke: #5D4037;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+
+        .modal-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.1s ease-in-out;
+        }
+
+        /* Style for the modal content */
+        .modal-content {
+            background-color: #3A6B35;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0px 0px 10px rgba(165, 151, 151, 0.5);
+            width: 300px;
+        }
+
+        /* Style for the modal header */
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        label {
+            color: white;
+        }
+
+        /* Style for the close button */
+        .close-button {
+            cursor: pointer;
+            background-color: transparent;
+            border: none;
+            font-size: 18px;
+        }
+
+        .context-menu {
+            display: none;
+            position: absolute;
+            background-color: #3A6B35;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0px 0px 10px rgba(165, 151, 151, 0.5);
+            z-index: 1000;
+        }
+
+        .context-menu ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .context-menu li {
+            color: white;
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+
+        .context-menu li:hover {
+            background-color: #45a049;
+        }
+    </style>
+    <script src="script.js"></script>
+</head>
+
+<body>
+    <div class="top-bar">
+        <h3>Family Tree</h3>
+        <div class="button-group">
+            <button id="addNodeButton">Add Family Member</button>
+            <button id="addLinkButton">Add Relationship</button>
+            <button id="openModalButton">Open Modal</button>
+
+        </div>
+    </div>
+    <div id="canvas-container">
+        <canvas id="family-tree-canvas"></canvas>
+    </div>
+
+    <!-- Modal container for editing node information -->
+    <div id="node-modal" class="modal-container">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="color: white;">Edit Node</h2>
+                <button class="close-button" id="closeButton">&times;</button>
+            </div>
+            <form id="node-form">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name"><br><br>
+                <label for="sex">Sex:</label>
+                <input type="text" id="sex" name="sex"><br><br>
+                <label for="description">Description:</label>
+                <input type="text" id="description" name="description"><br><br>
+                <button type="button" id="saveButton">Save</button>
+            </form>
+        </div>
+    </div>
+
+   <!-- save tree modal -->
+   <div id="modalContainer" class="modal-container" style="z-index: 100;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 style="color: white;">Enter Details</h2>
+            <button class="close-button" id="closeModalButton">&times;</button>
+        </div>
+        <form id="modalForm">
+            <label for="username">Username:</label>
+            <input type="text" id="usernameInput" name="username"><br><br>
+            <label for="treename">Tree Name:</label>
+            <input type="text" id="treenameInput" name="treename"><br><br>
+            <button type="button" id="submitModalButton">Submit</button>
+        </form>
+    </div>
+</div>
+
+    <div id="context-menu" class="context-menu">
+        <ul>
+            <li id="edit-option">Edit Node</li>
+            <hr>
+            <li id="edit-option">Remove Member</li>
+            <hr>
+            <li id="edit-option">Add member(same level)</li>
+            <hr>
+            <li id="edit-option">Add child Member</li>
+            <hr>
+
+            <!-- Add more context menu options as needed -->
+        </ul>
+    </div>
+
+
+    <script>
+        // creating canvas
+        const canvas = document.getElementById('family-tree-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+
+        //array to store nodes
+        const nodes = [];
+        const addNodeButton = document.getElementById('addNodeButton');
+        addNodeButton.addEventListener('click', addRectangleNode);
+
+        // event listeners to drag and drop functionality
+        canvas.addEventListener('mousedown', startDragging);
+        canvas.addEventListener('mousemove', dragNode);
+        canvas.addEventListener('mouseup', stopDragging);
+
+
+        const nodeWidth = 140;
+        const nodeHeight = 80;
+
+
+        function addRectangleNode() {
+            const node = {
+                x: Math.random() * (canvas.width - nodeWidth),
+                y: Math.random() * (canvas.height - nodeHeight),
+                width: nodeWidth,
+                height: nodeHeight,
+                name: 'Name',
+                sex: 'Sex',
+                description: 'Description',
+                isDragging: false,
+                isResizing: false,
+            };
+            nodes.push(node);
+            drawNodes();
+            drawAllLines();
+        }
+
+        function drawNodes() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            nodes.forEach(node => {
+                ctx.strokeStyle = 'black';
+                ctx.fillStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.fillRect(node.x, node.y, node.width, node.height);
+                ctx.strokeRect(node.x, node.y, node.width, node.height);
+
+                ctx.font = '14px Arial';
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.fillText(node.name, node.x + node.width / 2, node.y + 20);
+                ctx.fillText(node.sex, node.x + node.width / 2, node.y + 40);
+                ctx.fillText(node.description, node.x + node.width / 2, node.y + 60);
+
+            });
+        }
+
+        let selectedNode = null;
+        let prevX = 0;
+        let prevY = 0;
+
+        function startDragging(event) {
+            const mouseX = event.clientX;
+            const mouseY = event.clientY;
+
+            for (const node of nodes) {
+                if (
+                    mouseX >= node.x && mouseX <= node.x + node.width &&
+                    mouseY >= node.y && mouseY <= node.y + node.height
+                ) {
+                    selectedNode = node;
+                    prevX = mouseX - node.x;
+                    prevY = mouseY - node.y;
+                    if (mouseX > node.x + node.width && mouseY > node.y + node.height) {
+                        node.isResizing = true;
+                    } else {
+                        node.isDragging = true;
+                    }
+
+                    drawNodes();
+                    drawAllLines();
+                    break;
+                }
+            }
+        }
+
+
+        function dragNode(event) {
+            if (selectedNode) {
+                const mouseX = event.clientX;
+                const mouseY = event.clientY;
+
+                if (selectedNode.isDragging) {
+                    selectedNode.x = mouseX - prevX;
+                    selectedNode.y = mouseY - prevY;
+                } else if (selectedNode.isResizing) {
+                    selectedNode.width = Math.max(mouseX - selectedNode.x, 50);
+                    selectedNode.height = Math.max(mouseY - selectedNode.y, 50);
+                }
+                drawNodes();
+                drawAllLines();
+            }
+        }
+
+        function stopDragging() {
+            if (selectedNode) {
+                selectedNode.isDragging = false;
+                selectedNode.isResizing = false;
+                selectedNode = null;
+            }
+        }
+        // Double-click event listener for nodes
+        canvas.addEventListener('dblclick', handleNodeDoubleClick);
+
+        function handleNodeDoubleClick(event) {
+            const mouseX = event.clientX;
+            const mouseY = event.clientY;
+
+            for (const node of nodes) {
+                if (
+                    mouseX >= node.x && mouseX <= node.x + node.width &&
+                    mouseY >= node.y && mouseY <= node.y + node.height
+                ) {
+                    const nodeForm = document.getElementById('node-form');
+                    const nameInput = document.getElementById('name');
+                    const sexInput = document.getElementById('sex');
+                    const descriptionInput = document.getElementById('description');
+                    const saveButton = document.getElementById('saveButton');
+                    const closeButton = document.getElementById('closeButton');
+                    const modal = document.getElementById('node-modal');
+
+                    // Populate the form with the existing node data
+                    nameInput.value = node.name;
+                    sexInput.value = node.sex;
+                    descriptionInput.value = node.description;
+
+                    // Display the modal with a slight delay
+                    setTimeout(() => {
+                        modal.style.display = 'flex';
+                        setTimeout(() => {
+                            modal.style.opacity = '1';
+                        }, 10);
+                    }, 300);
+
+                    // Save button click event listener
+                    saveButton.addEventListener('click', () => {
+                        // Update node data with new values from the form
+                        node.name = nameInput.value;
+                        node.sex = sexInput.value;
+                        node.description = descriptionInput.value;
+
+                        // Redraw nodes and lines
+                        drawNodes();
+                        drawAllLines();
+
+                        // Hide the modal
+                        modal.style.opacity = '0';
+                        setTimeout(() => {
+                            modal.style.display = 'none';
+                        }, 300);
+                    });
+
+                    // Close button click event listener
+                    closeButton.addEventListener('click', () => {
+                        // Hide the modal
+                        modal.style.opacity = '0';
+                        setTimeout(() => {
+                            modal.style.display = 'none';
+                        }, 300);
+                    });
+
+                    break;
+                }
+            }
+        }
+
+
+        canvas.addEventListener('mousemove', drawLine);
+        function drawLine(event) {
+            if (!isDrawing) return;
+
+            const endX = event.clientX - canvas.getBoundingClientRect().left;
+            const endY = event.clientY - canvas.getBoundingClientRect().top;
+
+            clearCanvas();
+            drawNodes();
+            drawAllLines();
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        //lines array to store the lines      
+        const lines = [];
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+
+
+
+        const addLineButton = document.getElementById('addLinkButton');
+        addLineButton.addEventListener('click', () => {
+            isDrawing = true;
+            canvas.addEventListener('click', setStartPoint);
+        });
+
+        function setStartPoint(event) {
+            if (isDrawing) {
+                startX = event.clientX - canvas.getBoundingClientRect().left;
+                startY = event.clientY - canvas.getBoundingClientRect().top;
+                canvas.removeEventListener('click', setStartPoint);
+                canvas.addEventListener('click', setEndPoint);
+
+            }
+        }
+
+        function setEndPoint(event) {
+            const endX = event.clientX - canvas.getBoundingClientRect().left;
+            const endY = event.clientY - canvas.getBoundingClientRect().top;
+
+            lines.push({ startX, startY, endX, endY });
+            isDrawing = false;
+            canvas.removeEventListener('click', setEndPoint);
+            clearCanvas();
+            drawNodes();
+            drawAllLines();
+        }
+
+        function drawAllLines() {
+            lines.forEach(line => {
+                ctx.beginPath();
+                ctx.moveTo(line.startX, line.startY);
+                ctx.lineTo(line.endX, line.endY);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        canvas.addEventListener('contextmenu', handleNodeRightClick);
+
+        function handleNodeRightClick(event) {
+            event.preventDefault(); // Prevent the default context menu from showing
+
+            const mouseX = event.clientX;
+            const mouseY = event.clientY;
+
+            for (const node of nodes) {
+                if (
+                    mouseX >= node.x && mouseX <= node.x + node.width &&
+                    mouseY >= node.y && mouseY <= node.y + node.height
+                ) {
+                    const contextMenu = document.getElementById('context-menu');
+                    const editOption = document.getElementById('edit-option');
+
+                    // Position the context menu at the clicked location
+                    contextMenu.style.left = `${mouseX}px`;
+                    contextMenu.style.top = `${mouseY}px`;
+
+                    // Show the context menu
+                    contextMenu.style.display = 'block';
+
+                    // Edit option click event listener
+                    editOption.addEventListener('click', () => {
+                        // Hide the context menu
+                        contextMenu.style.display = 'none';
+
+                        // Open the node edit modal (similar to the double-click behavior)
+                        const nodeForm = document.getElementById('node-form');
+                        const nameInput = document.getElementById('name');
+                        const sexInput = document.getElementById('sex');
+                        const descriptionInput = document.getElementById('description');
+                        const saveButton = document.getElementById('saveButton');
+                        const closeButton = document.getElementById('closeButton');
+                        const modal = document.getElementById('node-modal');
+
+                        // Populate the form with the existing node data
+                        nameInput.value = node.name;
+                        sexInput.value = node.sex;
+                        descriptionInput.value = node.description;
+
+                        // Display the modal with a slight delay
+                        setTimeout(() => {
+                            modal.style.display = 'flex';
+                            setTimeout(() => {
+                                modal.style.opacity = '1';
+                            }, 10);
+                        }, 300);
+
+                        // Save button click event listener
+                        saveButton.addEventListener('click', () => {
+                            // Update node data with new values from the form
+                            node.name = nameInput.value;
+                            node.sex = sexInput.value;
+                            node.description = descriptionInput.value;
+
+                            // Redraw nodes and lines
+                            drawNodes();
+                            drawAllLines();
+
+                            // Hide the modal
+                            modal.style.opacity = '0';
+                            setTimeout(() => {
+                                modal.style.display = 'none';
+                            }, 300);
+                        });
+
+                        // Close button click event listener
+                        closeButton.addEventListener('click', () => {
+                            // Hide the modal
+                            modal.style.opacity = '0';
+                            setTimeout(() => {
+                                modal.style.display = 'none';
+                            }, 300);
+                        });
+                    });
+
+                    // Handle other context menu options here
+
+                    // Click anywhere to close the context menu
+                    document.addEventListener('click', (event) => {
+                        if (!contextMenu.contains(event.target)) {
+                            contextMenu.style.display = 'none';
+                        }
+                    });
+
+                    break;
+                }
+            }
+        }
+        // ... (existing code)
+        // ... (existing code)
+
+        const openModalButton = document.getElementById('openModalButton');
+const modalContainer = document.getElementById('modalContainer');
+const closeModalButton = document.getElementById('closeModalButton');
+const submitModalButton = document.getElementById('submitModalButton');
+const modalForm = document.getElementById('modalForm');
+const usernameInput = document.getElementById('usernameInput');
+const treenameInput = document.getElementById('treenameInput');
+
+openModalButton.addEventListener('click', () => {
+    console.log("khul rha hu")
+    modalContainer.style.display = 'flex';
+    modalContainer.style.opacity = 1; 
+});
+
+closeModalButton.addEventListener('click', () => {
+    modalContainer.style.display = 'none';
+});
+
+submitModalButton.addEventListener('click', () => {
+    const username = usernameInput.value;
+    const treename = treenameInput.value;
+
+    // const nodesData = nodes.map(node => ({
+    //     x: node.x,
+    //     y: node.y,
+    //     width: node.width,
+    //     height: node.height,
+    //     name: node.name,
+    //     sex: node.sex,
+    //     description: node.description
+    // }));
+const nodesData = nodes;
+    // const linesData = lines.map(line => ({
+    //     startX: line.startX,
+    //     startY: line.startY,
+    //     endX: line.endX,
+    //     endY: line.endY
+    // }));
+    const linesData = lines;
+    const postData = {
+        username: username,
+        treename: treename,
+        nodes: nodesData,
+        lines: linesData
+    };
+
+    // Make a POST request to your server
+    console.log("aa gy yha tk");
+    fetch('/savePoint', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(postData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log(data); // Handle response data as needed
+        modalContainer.style.display = 'none'; // Close the modal
+    })
+    .catch(error => {
+        console.log("M ya hu")
+        console.error('Error:', error);
+    });
+});
+
+    </script>
+</body>
+
+</html>
